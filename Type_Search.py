@@ -4,19 +4,18 @@ import json
 import re
 
 from fastapi import HTTPException
-
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+# ===================== ENV =====================
+
 load_dotenv()
 os.environ["GROQ_API_KEY"] = os.getenv("Groq_api")
 
+# ===================== UTILS =====================
+
 def extract_quantity(text: str):
-    """
-    Extracts quantity like:
-    100g, 1 cup, 2 eggs, 250 ml
-    """
     match = re.search(
         r"(\d+(\.\d+)?\s?(g|gm|grams|kg|ml|cup|cups|tbsp|tsp|pieces|piece|eggs))",
         text.lower()
@@ -28,20 +27,54 @@ def extract_quantity(text: str):
 def has_quantity(text: str) -> bool:
     return extract_quantity(text) != "Standard serving"
 
+# ===================== LLM =====================
+
 llm = ChatGroq(model="llama-3.1-8b-instant")
 parser = StrOutputParser()
 
-PROMPT_TEMPLATE = """
+# ===================== NORMALIZATION PROMPT =====================
+
+NORMALIZE_PROMPT = """
+You are a food name normalization expert.
+
+Rules:
+1. Correct spelling mistakes.
+2. If words together form ONE known dish, treat as ONE food.
+   Examples:
+   - "masala dosa" → ONE food
+   - "chicken biryani" → ONE food
+3. Split foods ONLY if they are clearly separate using:
+   "and", ",", "+"
+4. Return ONLY valid JSON.
+
+FORMAT:
+{
+  "is_single_food": boolean,
+  "foods": [string]
+}
+
+User input:
+{food_input}
+"""
+
+normalize_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", NORMALIZE_PROMPT),
+        ("user", "{food_input}")
+    ]
+)
+
+# ===================== NUTRITION PROMPT =====================
+
+NUTRITION_PROMPT = """
 You are a professional nutrition assistant.
 
 Rules:
-1. User may give ONE or MULTIPLE foods in one input.
-2. Split multiple foods correctly.
-3. If quantity is mentioned for a food, use it.
-4. If quantity is NOT mentioned, assume standard serving size.
-5. Calculate nutrition for EACH food separately.
-6. Calculate TOTAL nutrition by summing all foods.
-7. Return ONLY valid JSON. No explanation. No markdown.
+1. Food names are already normalized.
+2. Use quantity if provided, otherwise assume standard serving size.
+3. Calculate nutrition for EACH food separately.
+4. Calculate TOTAL nutrition by summing all foods.
+5. Return ONLY valid JSON.
 
 STRICT JSON FORMAT:
 
@@ -68,21 +101,37 @@ Food input:
 {food_input}
 """
 
-prompt = ChatPromptTemplate.from_messages(
+nutrition_prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", PROMPT_TEMPLATE),
+        ("system", NUTRITION_PROMPT),
         ("user", "{food_input}")
     ]
 )
 
-def get_nutrition(food_input: str) -> dict:
-    """
-    Core nutrition logic.
-    Can be reused by FastAPI, CLI, batch jobs, tests, etc.
-    """
+# ===================== NORMALIZE INPUT =====================
 
-    chain = prompt | llm | parser
+def normalize_food_input(food_input: str) -> dict:
+    chain = normalize_prompt | llm | parser
     response = chain.invoke({"food_input": food_input})
+
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        # Safe fallback
+        return {
+            "is_single_food": True,
+            "foods": [food_input]
+        }
+
+# ===================== CORE FUNCTION =====================
+
+def get_nutrition(food_input: str) -> dict:
+    normalized = normalize_food_input(food_input)
+
+    foods_for_llm = " and ".join(normalized["foods"])
+
+    chain = nutrition_prompt | llm | parser
+    response = chain.invoke({"food_input": foods_for_llm})
 
     try:
         data = json.loads(response)
@@ -98,12 +147,12 @@ def get_nutrition(food_input: str) -> dict:
             detail="Malformed nutrition response"
         )
 
- 
     for food in data["foods"]:
         if not food.get("quantity"):
             food["quantity"] = extract_quantity(food["food_name"])
 
     return {
+        "result_type": "single" if normalized["is_single_food"] else "multiple",
         "food_input": food_input.title(),
         "serving_note": (
             "Based on user provided quantity"
