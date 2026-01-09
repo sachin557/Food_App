@@ -55,24 +55,24 @@ Rules:
 
 STRICT JSON FORMAT:
 
-{{
+{
   "foods": [
-    {{
+    {
       "food_name": string,
       "quantity": string,
       "carbohydrates_g": number,
       "protein_g": number,
       "fat_g": number,
       "calories_kcal": number
-    }}
+    }
   ],
-  "total_nutrition": {{
+  "total_nutrition": {
     "carbohydrates_g": number,
     "protein_g": number,
     "fat_g": number,
     "calories_kcal": number
-  }}
-}}
+  }
+}
 
 Food input:
 {food_input}
@@ -105,17 +105,14 @@ def get_nutrition(food_input: str) -> dict:
             detail="Malformed nutrition response"
         )
 
-    # Normalize food names & quantities
+    # TRUST LLM FOOD NAME (NOT USER INPUT)
     for food in data["foods"]:
         food["food_name"] = normalize_food_name(food["food_name"])
         if not food.get("quantity"):
             food["quantity"] = extract_quantity(food["food_name"])
 
-    is_multiple = len(data["foods"]) > 1
-
     return {
-        "result_type": "multiple" if is_multiple else "single",
-        "food_input": food_input.title(),
+        "result_type": "multiple" if len(data["foods"]) > 1 else "single",
         "serving_note": (
             "Based on user provided quantity"
             if has_quantity(food_input)
