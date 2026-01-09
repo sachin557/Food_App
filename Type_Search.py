@@ -34,28 +34,51 @@ parser = StrOutputParser()
 
 # ===================== NORMALIZATION PROMPT =====================
 
-NORMALIZE_PROMPT = """
-You are a food name normalization expert.
+NORMALIZE_PROMPT ="""
+You are a professional nutrition assistant.
+
+CRITICAL INSTRUCTIONS (DO NOT IGNORE):
+1. Correct spelling mistakes in food names.
+2. Identify the MOST LIKELY intended real food.
+3. Use STANDARD, WELL-KNOWN food names only.
+4. DO NOT invent food names.
+5. DO NOT split words incorrectly.
+6. If input is unclear, infer the closest common food.
+7. Normalize food names (e.g., "msala fosa" → "Masala Dosa").
 
 Rules:
-1. Correct spelling mistakes.
-2. If words together form ONE known dish, treat as ONE food.
-   Examples:
-   - "masala dosa" → ONE food
-   - "chicken biryani" → ONE food
-3. Split foods ONLY if they are clearly separate using:
-   "and", ",", "+"
-4. Return ONLY valid JSON.
+1. User may give ONE or MULTIPLE foods.
+2. Handle quantities if present.
+3. If quantity is missing, assume standard serving.
+4. Calculate nutrition per food.
+5. Calculate TOTAL nutrition.
+6. Return ONLY valid JSON.
 
-FORMAT:
-{
-  "is_single_food": boolean,
-  "foods": [string]
-}
+STRICT JSON FORMAT:
 
-User input:
+{{
+  "foods": [
+    {{
+      "food_name": string,
+      "quantity": string,
+      "carbohydrates_g": number,
+      "protein_g": number,
+      "fat_g": number,
+      "calories_kcal": number
+    }}
+  ],
+  "total_nutrition": {{
+    "carbohydrates_g": number,
+    "protein_g": number,
+    "fat_g": number,
+    "calories_kcal": number
+  }}
+}}
+
+Food input:
 {food_input}
 """
+
 
 normalize_prompt = ChatPromptTemplate.from_messages(
     [
