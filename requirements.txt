@@ -1,0 +1,7 @@
+ultralytics
+langchain
+langchain-groq
+google-genai
+fastapi
+uvicorn
+python-dotenv
