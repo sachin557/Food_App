@@ -1,30 +1,42 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from Type_Search import get_nutrition
 
+# ===================== APP =====================
 
-app = FastAPI()
+app = FastAPI(title="Nutrition API")
+
+# ===================== CORS =====================
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],   # OK for mobile + web apps
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ===================== REQUEST MODEL =====================
+
 class FoodRequest(BaseModel):
     food_name: str
 
-
+# ===================== ROUTES =====================
 
 @app.post("/search-food")
 def search_food(data: FoodRequest):
-    if not data.food_name.strip():
-        return {"error": "Input cannot be empty"}
+    food_input = data.food_name.strip()
 
-    return get_nutrition(data.food_name)
+    if not food_input:
+        raise HTTPException(
+            status_code=400,
+            detail="Food input cannot be empty"
+        )
+
+    return get_nutrition(food_input)
+
 
 @app.get("/")
 def health():
