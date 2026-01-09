@@ -42,7 +42,6 @@ def calculate_total_nutrition(foods: list) -> dict:
         total["fat_g"] += float(food.get("fat_g", 0))
         total["calories_kcal"] += float(food.get("calories_kcal", 0))
 
-    # round for clean UI
     return {k: round(v, 2) for k, v in total.items()}
 
 # ===================== LLM =====================
@@ -55,18 +54,33 @@ parser = StrOutputParser()
 PROMPT_TEMPLATE = """
 You are a professional nutrition assistant.
 
-CRITICAL INSTRUCTIONS:
-1. Correct spelling mistakes in food names.
-2. Identify the MOST LIKELY intended real food.
-3. Use STANDARD, WELL-KNOWN food names only.
-4. DO NOT invent food names.
-5. DO NOT split words incorrectly.
+CRITICAL RULES (DO NOT BREAK):
+1. ALWAYS split foods into separate items.
+2. NEVER merge multiple foods into one.
+3. If input contains "and", commas, or multiple foods → return MULTIPLE food objects.
+4. Correct spelling mistakes (e.g., "msala dosa" → "Masala Dosa").
+5. Use standard food names only.
+
+Examples:
+Input: "2 eggs and masala dosa"
+Output foods:
+- Eggs
+- Masala Dosa
+
+Input: "neer dosa masala dosa"
+Output foods:
+- neer dosa
+- Masala Dosa
+
+Input: "apple, banana"
+Output foods:
+- Apple
+- Banana
 
 Rules:
-1. User may give ONE or MULTIPLE foods.
-2. Use quantity if provided, otherwise assume standard serving size.
-3. Calculate nutrition for EACH food.
-4. Return ONLY valid JSON.
+- Use quantity if provided, else assume standard serving.
+- Calculate nutrition PER FOOD.
+- Return ONLY valid JSON.
 
 STRICT JSON FORMAT:
 
@@ -103,20 +117,13 @@ def get_nutrition(food_input: str) -> dict:
     try:
         data = json.loads(response)
     except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=500,
-            detail="Invalid response from AI model"
-        )
+        raise HTTPException(status_code=500, detail="Invalid response from AI model")
 
-    if "foods" not in data:
-        raise HTTPException(
-            status_code=500,
-            detail="Malformed nutrition response"
-        )
+    foods = data.get("foods", [])
+    if not foods:
+        raise HTTPException(status_code=500, detail="No food detected")
 
-    foods = data["foods"]
-
-    # Normalize food names & quantities
+    # Normalize foods
     for food in foods:
         food["food_name"] = normalize_food_name(food["food_name"])
         if not food.get("quantity"):
