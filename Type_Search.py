@@ -28,6 +28,23 @@ def has_quantity(text: str) -> bool:
 def normalize_food_name(name: str) -> str:
     return " ".join(word.capitalize() for word in name.split())
 
+def calculate_total_nutrition(foods: list) -> dict:
+    total = {
+        "carbohydrates_g": 0.0,
+        "protein_g": 0.0,
+        "fat_g": 0.0,
+        "calories_kcal": 0.0
+    }
+
+    for food in foods:
+        total["carbohydrates_g"] += float(food.get("carbohydrates_g", 0))
+        total["protein_g"] += float(food.get("protein_g", 0))
+        total["fat_g"] += float(food.get("fat_g", 0))
+        total["calories_kcal"] += float(food.get("calories_kcal", 0))
+
+    # round for clean UI
+    return {k: round(v, 2) for k, v in total.items()}
+
 # ===================== LLM =====================
 
 llm = ChatGroq(model="llama-3.1-8b-instant")
@@ -44,14 +61,12 @@ CRITICAL INSTRUCTIONS:
 3. Use STANDARD, WELL-KNOWN food names only.
 4. DO NOT invent food names.
 5. DO NOT split words incorrectly.
-6. Normalize food names (e.g., "msala fosa" → "Masala Dosa").
 
 Rules:
 1. User may give ONE or MULTIPLE foods.
 2. Use quantity if provided, otherwise assume standard serving size.
 3. Calculate nutrition for EACH food.
-4. Calculate TOTAL nutrition by summing all foods.
-5. Return ONLY valid JSON.
+4. Return ONLY valid JSON.
 
 STRICT JSON FORMAT:
 
@@ -65,13 +80,7 @@ STRICT JSON FORMAT:
       "fat_g": number,
       "calories_kcal": number
     }
-  ],
-  "total_nutrition": {
-    "carbohydrates_g": number,
-    "protein_g": number,
-    "fat_g": number,
-    "calories_kcal": number
-  }
+  ]
 }
 
 Food input:
@@ -99,25 +108,29 @@ def get_nutrition(food_input: str) -> dict:
             detail="Invalid response from AI model"
         )
 
-    if "foods" not in data or "total_nutrition" not in data:
+    if "foods" not in data:
         raise HTTPException(
             status_code=500,
             detail="Malformed nutrition response"
         )
 
-    # TRUST LLM FOOD NAME (NOT USER INPUT)
-    for food in data["foods"]:
+    foods = data["foods"]
+
+    # Normalize food names & quantities
+    for food in foods:
         food["food_name"] = normalize_food_name(food["food_name"])
         if not food.get("quantity"):
             food["quantity"] = extract_quantity(food["food_name"])
 
+    total_nutrition = calculate_total_nutrition(foods)
+
     return {
-        "result_type": "multiple" if len(data["foods"]) > 1 else "single",
+        "result_type": "multiple" if len(foods) > 1 else "single",
         "serving_note": (
             "Based on user provided quantity"
             if has_quantity(food_input)
             else "Based on standard serving size"
         ),
-        "foods": data["foods"],
-        "total_nutrition": data["total_nutrition"]
+        "foods": foods,
+        "total_nutrition": total_nutrition
     }
