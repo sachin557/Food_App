@@ -74,23 +74,24 @@ Rules:
 
 JSON FORMAT (STRICT):
 
-{
+{{
   "foods": [
-    {
+    {{
       "food_name": "string",
       "quantity": "string",
       "carbohydrates_g": number,
       "protein_g": number,
       "fat_g": number,
       "calories_kcal": number
-    }
+    }}
   ]
-}
+}}
 """
         ),
         ("human", "Food input: {food_input}")
     ]
 )
+
 
 # ===================== CORE FUNCTION =====================
 def get_nutrition(food_input: str) -> dict:
