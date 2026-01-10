@@ -79,13 +79,44 @@ JSON FORMAT:
 Food input:
 {food_input}
 """
-
 prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", PROMPT_TEMPLATE),
-        ("user", "{food_input}")
+        (
+            "system",
+            """
+You are a professional nutrition assistant.
+
+CRITICAL:
+- Fix spelling mistakes (e.g. "msala dosa" → "Masala Dosa")
+- Use ONLY real, common food names
+- DO NOT split words incorrectly
+
+Rules:
+1. User may give ONE or MULTIPLE foods.
+2. Use quantity if present, otherwise standard serving.
+3. Return nutrition per food.
+4. Return ONLY valid JSON.
+
+The JSON response MUST follow this structure exactly:
+
+{
+  "foods": [
+    {
+      "food_name": "string",
+      "quantity": "string",
+      "carbohydrates_g": number,
+      "protein_g": number,
+      "fat_g": number,
+      "calories_kcal": number
+    }
+  ]
+}
+"""
+        ),
+        ("human", "Food input: {food_input}")
     ]
 )
+
 
 # ===================== CORE FUNCTION =====================
 
