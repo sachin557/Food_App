@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 from dotenv import load_dotenv
 from fastapi import HTTPException
 
@@ -42,7 +43,7 @@ def calculate_total_nutrition(foods: list) -> dict:
         "carbohydrates_g": 0.0,
         "protein_g": 0.0,
         "fat_g": 0.0,
-        "calories_kcal": 0.0
+        "calories_kcal": 0.0,
     }
 
     for food in foods:
@@ -54,12 +55,11 @@ def calculate_total_nutrition(foods: list) -> dict:
     return {k: round(v, 2) for k, v in total.items()}
 
 
-# ---------- SAFE JSON PARSER ----------
+# ===================== SAFE JSON PARSER =====================
 def safe_json_parse(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Attempt recovery from partial output
         start = text.find("{")
         end = text.rfind("}") + 1
         if start != -1 and end != -1:
@@ -74,8 +74,8 @@ def safe_json_parse(text: str) -> dict:
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0,
-    max_tokens=800,
-    timeout=60,
+    max_tokens=600,
+    timeout=40,
 )
 
 parser = StrOutputParser()
@@ -88,55 +88,70 @@ prompt = ChatPromptTemplate.from_messages(
 You are a professional nutrition assistant.
 
 CRITICAL:
-- Fix spelling mistakes (e.g. "msala dosa" → "Masala Dosa")
-- Use ONLY real, common food names
+- Fix spelling mistakes
+- Use ONLY real foods
 - DO NOT hallucinate foods
 
 Rules:
-1. User may give multiple foods (MAX {MAX_FOODS}).
-2. If more than {MAX_FOODS} foods are detected, return ONLY the first {MAX_FOODS}.
-3. Use quantity if present, otherwise standard serving.
-4. Return nutrition per food.
-5. Return ONLY valid JSON.
+1. User may give multiple foods (MAX {MAX_FOODS})
+2. Use quantity if present, otherwise standard serving
+3. Return nutrition per food
+4. Return ONLY valid JSON
 
-JSON FORMAT (STRICT):
+The response MUST be a JSON object with this structure:
 
-{{
-  "foods": [
-    {{
-      "food_name": "string",
-      "quantity": "string",
-      "carbohydrates_g": number,
-      "protein_g": number,
-      "fat_g": number,
-      "calories_kcal": number
-    }}
-  ]
-}}
+foods: list of objects, each object has:
+- food_name (string)
+- quantity (string)
+- carbohydrates_g (number)
+- protein_g (number)
+- fat_g (number)
+- calories_kcal (number)
+
+DO NOT include any text outside JSON.
 """
         ),
         ("human", "Food input: {food_input}")
     ]
 )
 
+
+
+# ===================== RETRY HELPER =====================
+def invoke_with_retry(chain, payload, retries=3, delay=2):
+    for attempt in range(retries):
+        try:
+            return chain.invoke(payload)
+        except Exception as e:
+            if attempt == retries - 1:
+                raise e
+            time.sleep(delay)
+
+
 # ===================== CORE FUNCTION =====================
 def get_nutrition(food_input: str) -> dict:
-    # ---------- HARD FOOD LIMIT ----------
+    # ---- HARD FOOD LIMIT ----
     food_count = len([f for f in re.split(r",|and", food_input) if f.strip()])
     if food_count > MAX_FOODS:
         raise HTTPException(
             status_code=400,
-            detail=f"Maximum {MAX_FOODS} foods allowed per request"
+            detail=f"Maximum {MAX_FOODS} foods allowed"
         )
 
     chain = prompt | llm | parser
 
     try:
-        response = chain.invoke({"food_input": food_input})
+        response = invoke_with_retry(
+            chain,
+            {"food_input": food_input},
+            retries=3,
+            delay=2,
+        )
         data = safe_json_parse(response)
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        print("❌ LLM ERROR:", repr(e))
         raise HTTPException(
             status_code=503,
             detail="Nutrition service temporarily unavailable"
@@ -151,8 +166,6 @@ def get_nutrition(food_input: str) -> dict:
         if not food.get("quantity"):
             food["quantity"] = extract_quantity(food["food_name"])
 
-    total_nutrition = calculate_total_nutrition(foods)
-
     return {
         "result_type": "multiple" if len(foods) > 1 else "single",
         "serving_note": (
@@ -161,5 +174,5 @@ def get_nutrition(food_input: str) -> dict:
             else "Based on standard serving size"
         ),
         "foods": foods,
-        "total_nutrition": total_nutrition
+        "total_nutrition": calculate_total_nutrition(foods),
     }
