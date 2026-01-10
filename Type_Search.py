@@ -1,7 +1,7 @@
-from dotenv import load_dotenv
 import os
 import json
 import re
+from dotenv import load_dotenv
 from fastapi import HTTPException
 
 from langchain_groq import ChatGroq
@@ -10,10 +10,14 @@ from langchain_core.output_parsers import StrOutputParser
 
 # ===================== ENV =====================
 load_dotenv()
-os.environ["GROQ_API_KEY"] = os.getenv("Groq_api")
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("Groq_api")
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY is not set")
+
+os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
 # ===================== UTILS =====================
-
 def extract_quantity(text: str) -> str:
     match = re.search(
         r"(\d+(\.\d+)?\s?(g|gm|grams|kg|ml|cup|cups|tbsp|tsp|pieces|piece|eggs|slice))",
@@ -21,11 +25,14 @@ def extract_quantity(text: str) -> str:
     )
     return match.group(1) if match else "Standard serving"
 
+
 def has_quantity(text: str) -> bool:
     return extract_quantity(text) != "Standard serving"
 
+
 def normalize_food_name(name: str) -> str:
     return name.strip().title()
+
 
 def calculate_total_nutrition(foods: list) -> dict:
     total = {
@@ -44,41 +51,9 @@ def calculate_total_nutrition(foods: list) -> dict:
     return {k: round(v, 2) for k, v in total.items()}
 
 # ===================== LLM =====================
-
-llm = ChatGroq(model="llama-3.1-8b-instant")
+llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
 parser = StrOutputParser()
 
-PROMPT_TEMPLATE = """
-You are a professional nutrition assistant.
-
-CRITICAL:
-- Fix spelling mistakes (e.g. "msala dosa" → "Masala Dosa")
-- Use ONLY real, common food names
-- DO NOT split words incorrectly
-
-Rules:
-1. User may give ONE or MULTIPLE foods.
-2. Use quantity if present, otherwise standard serving.
-3. Return nutrition per food.
-4. Return ONLY valid JSON.
-
-JSON FORMAT:
-{
-  "foods": [
-    {
-      "food_name": string,
-      "quantity": string,
-      "carbohydrates_g": number,
-      "protein_g": number,
-      "fat_g": number,
-      "calories_kcal": number
-    }
-  ]
-}
-
-Food input:
-{food_input}
-"""
 prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -89,7 +64,7 @@ You are a professional nutrition assistant.
 CRITICAL:
 - Fix spelling mistakes (e.g. "msala dosa" → "Masala Dosa")
 - Use ONLY real, common food names
-- DO NOT split words incorrectly
+- DO NOT hallucinate foods
 
 Rules:
 1. User may give ONE or MULTIPLE foods.
@@ -97,7 +72,7 @@ Rules:
 3. Return nutrition per food.
 4. Return ONLY valid JSON.
 
-The JSON response MUST follow this structure exactly:
+JSON FORMAT (STRICT):
 
 {
   "foods": [
@@ -117,21 +92,19 @@ The JSON response MUST follow this structure exactly:
     ]
 )
 
-
 # ===================== CORE FUNCTION =====================
-
 def get_nutrition(food_input: str) -> dict:
     chain = prompt | llm | parser
-    response = chain.invoke({"food_input": food_input})
 
     try:
+        response = chain.invoke({"food_input": food_input})
         data = json.loads(response)
-    except json.JSONDecodeError:
-        raise HTTPException(500, "Invalid AI response")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Invalid AI response")
 
     foods = data.get("foods", [])
     if not foods:
-        raise HTTPException(500, "No food detected")
+        raise HTTPException(status_code=500, detail="No food detected")
 
     for food in foods:
         food["food_name"] = normalize_food_name(food["food_name"])

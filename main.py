@@ -4,36 +4,28 @@ from pydantic import BaseModel
 
 from Type_Search import get_nutrition
 
-# ===================== APP =====================
-
 app = FastAPI(title="Nutrition API")
 
-# ===================== CORS =====================
-
+# ------------------ CORS ------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # OK for mobile + web apps
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ===================== REQUEST MODEL =====================
-
+# ------------------ Request Model ------------------
 class FoodRequest(BaseModel):
     food_name: str
 
-# ===================== ROUTES =====================
-
+# ------------------ Routes ------------------
 @app.post("/search-food")
-def search_food(data: FoodRequest):
+async def search_food(data: FoodRequest):
     food_input = data.food_name.strip()
 
     if not food_input:
-        raise HTTPException(
-            status_code=400,
-            detail="Food input cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Food input cannot be empty")
 
     return get_nutrition(food_input)
 
