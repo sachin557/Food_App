@@ -17,6 +17,9 @@ if not GROQ_API_KEY:
 
 os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
+# ===================== CONSTANTS =====================
+MAX_FOODS = 10
+
 # ===================== UTILS =====================
 def extract_quantity(text: str) -> str:
     match = re.search(
@@ -50,15 +53,38 @@ def calculate_total_nutrition(foods: list) -> dict:
 
     return {k: round(v, 2) for k, v in total.items()}
 
+
+# ---------- SAFE JSON PARSER ----------
+def safe_json_parse(text: str) -> dict:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Attempt recovery from partial output
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start != -1 and end != -1:
+            try:
+                return json.loads(text[start:end])
+            except Exception:
+                pass
+    raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+
+
 # ===================== LLM =====================
-llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",
+    temperature=0,
+    max_tokens=800,
+    timeout=60,
+)
+
 parser = StrOutputParser()
 
 prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            """
+            f"""
 You are a professional nutrition assistant.
 
 CRITICAL:
@@ -67,10 +93,11 @@ CRITICAL:
 - DO NOT hallucinate foods
 
 Rules:
-1. User may give ONE or MULTIPLE foods.
-2. Use quantity if present, otherwise standard serving.
-3. Return nutrition per food.
-4. Return ONLY valid JSON.
+1. User may give multiple foods (MAX {MAX_FOODS}).
+2. If more than {MAX_FOODS} foods are detected, return ONLY the first {MAX_FOODS}.
+3. Use quantity if present, otherwise standard serving.
+4. Return nutrition per food.
+5. Return ONLY valid JSON.
 
 JSON FORMAT (STRICT):
 
@@ -92,23 +119,35 @@ JSON FORMAT (STRICT):
     ]
 )
 
-
 # ===================== CORE FUNCTION =====================
 def get_nutrition(food_input: str) -> dict:
+    # ---------- HARD FOOD LIMIT ----------
+    food_count = len([f for f in re.split(r",|and", food_input) if f.strip()])
+    if food_count > MAX_FOODS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {MAX_FOODS} foods allowed per request"
+        )
+
     chain = prompt | llm | parser
 
     try:
         response = chain.invoke({"food_input": food_input})
-        data = json.loads(response)
+        data = safe_json_parse(response)
+    except HTTPException:
+        raise
     except Exception:
-        raise HTTPException(status_code=500, detail="Invalid AI response")
+        raise HTTPException(
+            status_code=503,
+            detail="Nutrition service temporarily unavailable"
+        )
 
     foods = data.get("foods", [])
     if not foods:
         raise HTTPException(status_code=500, detail="No food detected")
 
     for food in foods:
-        food["food_name"] = normalize_food_name(food["food_name"])
+        food["food_name"] = normalize_food_name(food.get("food_name", ""))
         if not food.get("quantity"):
             food["quantity"] = extract_quantity(food["food_name"])
 
