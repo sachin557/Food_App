@@ -22,18 +22,6 @@ os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 MAX_FOODS = 10
 
 # ===================== UTILS =====================
-def extract_quantity(text: str) -> str:
-    match = re.search(
-        r"(\d+(\.\d+)?\s?(g|gm|grams|kg|ml|cup|cups|tbsp|tsp|pieces|piece|eggs|slice))",
-        text.lower()
-    )
-    return match.group(1) if match else "Standard serving"
-
-
-def has_quantity(text: str) -> bool:
-    return extract_quantity(text) != "Standard serving"
-
-
 def normalize_food_name(name: str) -> str:
     return name.strip().title()
 
@@ -74,12 +62,13 @@ def safe_json_parse(text: str) -> dict:
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0,
-    max_tokens=600,
+    max_tokens=700,
     timeout=40,
 )
 
 parser = StrOutputParser()
 
+# ===================== PROMPT (CRITICAL FIX) =====================
 prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -98,15 +87,20 @@ Rules:
 3. Return nutrition per food
 4. Return ONLY valid JSON
 
-The response MUST be a JSON object with this structure:
+The response MUST be a JSON object with this EXACT structure:
 
-foods: list of objects, each object has:
-- food_name (string)
-- quantity (string)
-- carbohydrates_g (number)
-- protein_g (number)
-- fat_g (number)
-- calories_kcal (number)
+{{{{ 
+  "foods": [
+    {{{{
+      "food_name": "string",
+      "quantity": "string",
+      "carbohydrates_g": number,
+      "protein_g": number,
+      "fat_g": number,
+      "calories_kcal": number
+    }}}}
+  ]
+}}}}
 
 DO NOT include any text outside JSON.
 """
@@ -114,8 +108,6 @@ DO NOT include any text outside JSON.
         ("human", "Food input: {food_input}")
     ]
 )
-
-
 
 # ===================== RETRY HELPER =====================
 def invoke_with_retry(chain, payload, retries=3, delay=2):
@@ -130,7 +122,7 @@ def invoke_with_retry(chain, payload, retries=3, delay=2):
 
 # ===================== CORE FUNCTION =====================
 def get_nutrition(food_input: str) -> dict:
-    # ---- HARD FOOD LIMIT ----
+    # ---- FOOD COUNT LIMIT ----
     food_count = len([f for f in re.split(r",|and", food_input) if f.strip()])
     if food_count > MAX_FOODS:
         raise HTTPException(
@@ -161,18 +153,13 @@ def get_nutrition(food_input: str) -> dict:
     if not foods:
         raise HTTPException(status_code=500, detail="No food detected")
 
+    # Normalize names
     for food in foods:
         food["food_name"] = normalize_food_name(food.get("food_name", ""))
-        if not food.get("quantity"):
-            food["quantity"] = extract_quantity(food["food_name"])
 
     return {
         "result_type": "multiple" if len(foods) > 1 else "single",
-        "serving_note": (
-            "Based on user provided quantity"
-            if has_quantity(food_input)
-            else "Based on standard serving size"
-        ),
+        "serving_note": "Nutrition calculated based on provided quantity or standard serving",
         "foods": foods,
         "total_nutrition": calculate_total_nutrition(foods),
     }
