@@ -4,7 +4,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from Type_Search import get_nutrition
-from ai_chat_gemini import gemini_fitness_chat
+from Ai_coach_chat import gemini_fitness_chat
 
 app = FastAPI(title="Nutrition & AI Fitness API")
 

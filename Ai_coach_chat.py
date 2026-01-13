@@ -1,24 +1,24 @@
 import os
-import google.generativeai as genai
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ------------------ GEMINI CONFIG ------------------
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# ------------------ GROQ CLIENT ------------------
+client = Groq(
+    api_key=os.getenv("Groq_api")
+)
 
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction="""
+SYSTEM_PROMPT = """
 You are a professional AI Fitness Coach and Nutrition Assistant.
 
-Your role:
+Your responsibilities:
 - Create personalized fitness plans
 - Suggest workouts (gym, home, cardio, strength, yoga)
-- Give diet & calorie guidance
-- Be clear, motivating, and practical
+- Provide diet & calorie guidance
+- Be motivating, clear, and practical
 - Use bullet points
-- Avoid medical claims
+- Avoid medical advice
 - Ask follow-up questions if needed
 
 Tone:
@@ -26,26 +26,32 @@ Tone:
 - Motivational
 - Simple language
 """
-)
 
 # ------------------ AI CHAT FUNCTION ------------------
 def gemini_fitness_chat(user_message: str) -> dict:
     try:
-        response = model.generate_content(
-            f"""
-User request:
-{user_message}
-
-Respond as a fitness coach with a clear plan.
-"""
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ],
+            temperature=0.7,
+            max_tokens=600,
         )
 
-        return {
-            "reply": response.text.strip()
-        }
+        reply_text = completion.choices[0].message.content
+
+        return {"reply": reply_text.strip()}
 
     except Exception as e:
+        print("Groq error:", e)
         return {
-            "reply": "⚠️ Sorry, I couldn't generate a fitness plan right now.",
-            "error": str(e)
+            "reply": "⚠️ Sorry, I couldn't generate a fitness plan right now."
         }
