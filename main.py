@@ -51,6 +51,6 @@ async def ai_chat(data: ChatRequest):
 @app.get("/")
 def health():
     return {"status": "Nutrition & AI Fitness API running"}
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
