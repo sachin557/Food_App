@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 
 from Type_Search import get_nutrition
-from Ai_coach_chat import gemini_fitness_chat  # Groq-based AI
+from Ai_coach_chat import ai_fitness_chat  # Groq-based AI
 
 # ------------------ APP INIT ------------------
 app = FastAPI(title="Nutrition & AI Fitness API")
@@ -57,7 +57,7 @@ async def ai_chat(data: ChatRequest):
 
     # ✅ Forward message + memory to AI
     return await run_in_threadpool(
-        gemini_fitness_chat,
+        ai_fitness_chat,
         user_message,
         data.food_context,
         data.chat_history,
