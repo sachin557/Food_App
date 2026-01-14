@@ -4,54 +4,65 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ------------------ GROQ CLIENT ------------------
-client = Groq(
-    api_key=os.getenv("Groq_api")
-)
+client = Groq(api_key=os.getenv("Groq_api"))
 
 SYSTEM_PROMPT = """
 You are a professional AI Fitness Coach and Nutrition Assistant.
 
-Your responsibilities:
-- Create personalized fitness plans
-- Suggest workouts (gym, home, cardio, strength, yoga)
-- Provide diet & calorie guidance
-- Be motivating, clear, and practical
+Rules:
+- Give workout + diet advice
 - Use bullet points
-- Avoid medical advice
-- Ask follow-up questions if needed
-
-Tone:
-- Friendly
-- Motivational
-- Simple language
+- Be motivating
+- Avoid medical claims
 """
 
-# ------------------ AI CHAT FUNCTION ------------------
-def gemini_fitness_chat(user_message: str) -> dict:
+def ai_fitness_chat(user_message, food_context=None, chat_history=None):
     try:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ]
+
+        # ✅ Inject food memory ONCE
+        if food_context:
+            messages.append({
+                "role": "system",
+                "content": f"""
+User food history (use this to personalize advice):
+{food_context}
+"""
+            })
+
+        # ✅ FIX ROLE NAMES + PRESERVE ORDER
+        if chat_history:
+            for msg in chat_history:
+                role = msg["role"]
+                if role == "ai":
+                    role = "assistant"   # 🔥 CRITICAL FIX
+
+                messages.append({
+                    "role": role,
+                    "content": msg["text"]
+                })
+        else:
+            # Only add user message if no history exists
+            messages.append({
+                "role": "user",
+                "content": user_message
+            })
+
         completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": user_message
-                }
-            ],
+            messages=messages,
             temperature=0.7,
-            max_tokens=600,
+            max_tokens=700,
         )
 
-        reply_text = completion.choices[0].message.content
-
-        return {"reply": reply_text.strip()}
+        return {
+            "reply": completion.choices[0].message.content.strip()
+        }
 
     except Exception as e:
         print("Groq error:", e)
         return {
-            "reply": "⚠️ Sorry, I couldn't generate a fitness plan right now."
+            "reply": "⚠️ AI is temporarily unavailable"
         }
