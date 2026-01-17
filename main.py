@@ -1,11 +1,16 @@
-from fastapi import FastAPI, HTTPException
+import os
+import tempfile
+
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 
+from speech_text import transcribe_audio
+from voice_search import get_voice_nutrition
 from Type_Search import get_nutrition
-from Ai_coach_chat import ai_fitness_chat  # Groq-based AI
+from Ai_coach_chat import ai_fitness_chat
 
 # ------------------ APP INIT ------------------
 app = FastAPI(title="Nutrition & AI Fitness API")
@@ -27,44 +32,80 @@ class FoodRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     food_context: Optional[Dict] = None
-    chat_history: Optional[List[Dict[str, str]]] = []
+    chat_history: Optional[List[Dict[str, str]]] = None
 
 
-# ------------------ ROUTES ------------------
-
+# ------------------ TEXT FOOD SEARCH ------------------
 @app.post("/search-food")
 async def search_food(data: FoodRequest):
     food_input = data.food_name.strip()
 
     if not food_input:
-        raise HTTPException(
-            status_code=400,
-            detail="Food input cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Food input cannot be empty")
 
     return await run_in_threadpool(get_nutrition, food_input)
 
 
+# ------------------ VOICE → FOOD SEARCH ------------------
+@app.post("/voice-food")
+async def voice_food(file: UploadFile = File(...)):
+    tmp_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+
+        # 🎙 Speech → Text
+        text = await run_in_threadpool(transcribe_audio, tmp_path)
+        print("🎙 Transcribed:", text)
+
+        if not text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Could not understand voice input"
+            )
+
+        # 🧠 Nutrition logic
+        nutrition = await run_in_threadpool(get_voice_nutrition, text)
+
+        # ✅ FLATTENED RESPONSE (Frontend friendly)
+        return {
+            "transcript": text,
+            "foods": nutrition["foods"],
+            "total_nutrition": nutrition["total_nutrition"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("❌ Voice food error:", repr(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Voice nutrition service unavailable"
+        )
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+# ------------------ AI FITNESS CHAT ------------------
 @app.post("/ai-chat")
 async def ai_chat(data: ChatRequest):
     user_message = data.message.strip()
 
     if not user_message:
-        raise HTTPException(
-            status_code=400,
-            detail="Message cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    # ✅ Forward message + memory to AI
     return await run_in_threadpool(
         ai_fitness_chat,
         user_message,
         data.food_context,
-        data.chat_history,
+        data.chat_history or [],
     )
 
 
-# ------------------ HEALTH CHECK ------------------
+# ------------------ HEALTH ------------------
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
