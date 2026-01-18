@@ -1,10 +1,8 @@
-ultralytics
 langchain
 langchain-groq
 google-genai
 fastapi
 uvicorn
 python-dotenv
-openai-whisper
-ffmpeg-python
+deepgram-sdk
 python-multipart

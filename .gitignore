@@ -4,3 +4,7 @@ Food_predict.py
 FoodApp_workflow.png
 YOLO_Train_food.py
 yolov8s.pt
+Lib
+Scripts
+.env
+included

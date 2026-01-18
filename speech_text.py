@@ -1,20 +1,25 @@
-import whisper
+import os
+from deepgram import DeepgramClient
+from dotenv import load_dotenv
+load_dotenv()
+DG_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
-# Load model ONCE (important)
-# Options:
-# tiny  -> fastest, least accurate
-# base  -> best balance (recommended)
-# small -> better accuracy, slower
+if not DG_API_KEY:
+    raise RuntimeError("DEEPGRAM_API_KEY is not set")
 
-model = whisper.load_model("base")
+deepgram = DeepgramClient(api_key=DG_API_KEY)
 
 def transcribe_audio(file_path: str) -> str:
     """
-    Converts speech audio to text using Whisper
+    Transcribes audio using Deepgram API (EC2-safe)
     """
-    result = model.transcribe(
-        file_path,
-        language="en",
-        fp16=False,  # required on CPU
-    )
-    return result["text"].strip()
+    with open(file_path, "rb") as audio:
+        response = deepgram.listen.prerecorded.v("1").transcribe_file(
+            audio,
+            {
+                "punctuate": True,
+                "language": "en"
+            }
+        )
+
+    return response["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
