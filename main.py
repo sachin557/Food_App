@@ -52,32 +52,34 @@ async def voice_food(file: UploadFile = File(...)):
     tmp_path = None
 
     try:
+        # Save uploaded audio
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(await file.read())
             tmp_path = tmp.name
 
-        # 🎙 Speech → Text
+        print("📦 Audio size:", os.path.getsize(tmp_path))
+
+        # 🎙 Speech → Text (Deepgram)
         text = await run_in_threadpool(transcribe_audio, tmp_path)
         print("🎙 Transcribed:", text)
 
+        # ✅ If speech not understood, return safe empty response
         if not text.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Could not understand voice input"
-            )
+            return {
+                "transcript": "",
+                "foods": [],
+                "total_nutrition": {}
+            }
 
-        # 🧠 Nutrition logic
+        # 🧠 Nutrition logic (Groq)
         nutrition = await run_in_threadpool(get_voice_nutrition, text)
 
-        # ✅ FLATTENED RESPONSE (Frontend friendly)
         return {
             "transcript": text,
             "foods": nutrition["foods"],
             "total_nutrition": nutrition["total_nutrition"],
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
         print("❌ Voice food error:", repr(e))
         raise HTTPException(

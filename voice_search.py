@@ -12,7 +12,7 @@ load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
-    raise RuntimeError("❌ GROQ_API_KEY not found in environment")
+    raise RuntimeError("❌ GROQ_API_KEY not found")
 
 MAX_FOODS = 10
 
@@ -69,7 +69,7 @@ def get_voice_nutrition(food_input: str) -> dict:
     try:
         llm = ChatGroq(
             model="llama-3.1-8b-instant",
-            groq_api_key=GROQ_API_KEY,  # ✅ EXPLICIT
+            groq_api_key=GROQ_API_KEY,
             temperature=0,
             max_tokens=700,
             timeout=40,
@@ -82,7 +82,10 @@ def get_voice_nutrition(food_input: str) -> dict:
         foods = data.get("foods", [])
 
         if not foods:
-            raise HTTPException(status_code=500, detail="No food detected")
+            return {
+                "foods": [],
+                "total_nutrition": {}
+            }
 
         total = {
             "carbohydrates_g": round(sum(f.get("carbohydrates_g", 0) for f in foods), 2),

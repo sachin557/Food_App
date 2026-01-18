@@ -1,9 +1,10 @@
 import os
 from deepgram import DeepgramClient
 from dotenv import load_dotenv
-load_dotenv()
-DG_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
+load_dotenv()
+
+DG_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 if not DG_API_KEY:
     raise RuntimeError("DEEPGRAM_API_KEY is not set")
 
@@ -18,7 +19,8 @@ def transcribe_audio(file_path: str) -> str:
             audio,
             {
                 "punctuate": True,
-                "language": "en"
+                "language": "en",
+                "model": "nova-2"
             }
         )
 
