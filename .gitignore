@@ -8,3 +8,20 @@ Lib
 Scripts
 .env
 included
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+Lib/
+Scripts/
+pyvenv.cfg
+
+# Env
+.env
+
+# OS
+Thumbs.db
+.DS_Store
