@@ -8,20 +8,27 @@ DG_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 if not DG_API_KEY:
     raise RuntimeError("DEEPGRAM_API_KEY is not set")
 
-deepgram = DeepgramClient(api_key=DG_API_KEY)
+client = DeepgramClient(DG_API_KEY)
 
 def transcribe_audio(file_path: str) -> str:
     """
-    Transcribes audio using Deepgram API (EC2-safe)
+    Transcribes audio using Deepgram SDK v5.x
     """
     with open(file_path, "rb") as audio:
-        response = deepgram.listen.prerecorded.v("1").transcribe_file(
+        response = client.listen.rest.transcribe_file(
             audio,
             {
-                "punctuate": True,
+                "model": "nova-2",
                 "language": "en",
-                "model": "nova-2"
+                "punctuate": True,
+                "smart_format": True,
+                "encoding": "linear16",
+                "sample_rate": 16000,
+                "channels": 1,
             }
         )
 
-    return response["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+    transcript = response["results"]["channels"][0]["alternatives"][0]["transcript"]
+    print("🧠 Deepgram transcript:", repr(transcript))
+
+    return transcript.strip() if transcript else ""
