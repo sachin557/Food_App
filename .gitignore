@@ -1,27 +1,50 @@
-app
-Food_App_Work_Status.xlsx
-Food_predict.py
-FoodApp_workflow.png
-YOLO_Train_food.py
-yolov8s.pt
-Lib
-Scripts
-.env
-included
+# ======================
 # Python
+# ======================
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Virtual environments
+# ======================
+# Virtual Environments
+# ======================
 venv/
 .venv/
+env/
+ENV/
+
+# Windows Python venv artifacts
 Lib/
 Scripts/
 pyvenv.cfg
 
-# Env
+# ======================
+# Environment variables
+# ======================
 .env
 
-# OS
+# ======================
+# OS files
+# ======================
 Thumbs.db
 .DS_Store
+
+# ======================
+# IDE / Editor
+# ======================
+.vscode/
+.idea/
+
+# ======================
+# Logs
+# ======================
+*.log
+
+# ======================
+# Build / Cache
+# ======================
+build/
+dist/
+.eggs/
+*.egg-info/
