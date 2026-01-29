@@ -5,6 +5,9 @@ from PIL import Image
 
 load_dotenv()
 
+if not os.getenv("GOOGLE_API_KEY"):
+    raise RuntimeError("GOOGLE_API_KEY not set")
+
 llm = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 FOOD_DETECTION_PROMPT = """
@@ -15,12 +18,10 @@ Rules:
 - DO NOT estimate nutrition
 - DO NOT guess quantities
 - Return ONLY comma-separated food names
-- If multiple foods exist, list all
+- If no food detected, return empty string
 
 Example output:
-"rice, grilled chicken, boiled egg"
-
-Return ONLY the food names, nothing else.
+rice, grilled chicken, boiled egg
 """
 
 def detect_foods_from_image(image_path: str) -> str:
@@ -31,4 +32,10 @@ def detect_foods_from_image(image_path: str) -> str:
         contents=[FOOD_DETECTION_PROMPT, image]
     )
 
-    return response.text.strip()
+    text = response.text.strip()
+
+    # sanitize output
+    text = text.split("\n")[-1]
+    text = text.replace(".", "").strip()
+
+    return text
