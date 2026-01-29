@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional, Dict, List
-
+from Image_search import detect_foods_from_image
 from speech_text import transcribe_audio
 from voice_search import get_voice_nutrition
 from Type_Search import get_nutrition
@@ -106,6 +106,52 @@ async def ai_chat(data: ChatRequest):
         data.chat_history or [],
     )
 
+@app.post("/image-search")
+async def image_search(file: UploadFile = File(...)):
+    tmp_path = None
+
+    try:
+        suffix = os.path.splitext(file.filename)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+
+        # 1️⃣ Detect food names from image
+        food_names = await run_in_threadpool(
+            detect_foods_from_image,
+            tmp_path
+        )
+
+        if not food_names.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="No food detected in image"
+            )
+
+        # 2️⃣ Reuse existing nutrition pipeline
+        nutrition_result = await run_in_threadpool(
+            get_nutrition,
+            food_names
+        )
+
+        return {
+            "input_type": "image",
+            "detected_foods": food_names,
+            **nutrition_result
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("❌ IMAGE SEARCH ERROR:", repr(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Image nutrition service unavailable"
+        )
+
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 # ------------------ HEALTH ------------------
 @app.api_route("/health", methods=["GET", "HEAD"])
