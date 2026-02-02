@@ -130,25 +130,30 @@ def invoke_with_retry(chain, payload, retries=2, delay=3):
 
 # ===================== CALCULATION =====================
 def apply_quantity_multiplier(food: dict) -> dict:
-    qty = food["quantity_number"]
-    base = food["nutrition_per_unit"]
+    qty = food.get("quantity_number", 1)
 
-    nutrition_unit = food.get("nutrition_unit", "").lower()
-    quantity_unit = food.get("quantity_unit", "").lower()
-
-    # 🔒 UNIT NORMALIZATION (minimal fix)
-    factor = 1.0
-
-    # If nutrition is per 100g or 100ml, normalize to per 1 unit
-    if "100" in nutrition_unit:
-        factor = qty / 100
+    # ✅ Support BOTH old & new formats
+    if "nutrition_per_unit" in food:
+        base = food["nutrition_per_unit"]
+        unit_label = food.get("nutrition_unit")
     else:
-        factor = qty
+        base = food["nutrition_per_standard_unit"]
+        unit_label = food.get("standard_unit")
+
+    # 🔒 Normalize factor safely
+    nutrition_unit = (unit_label or "").lower()
+    quantity_unit = (food.get("quantity_unit") or "").lower()
+
+    factor = qty
+
+    # If nutrition is per 100g / 100ml, normalize
+    if "100" in nutrition_unit and quantity_unit in {"gram", "ml"}:
+        factor = qty / 100
 
     return {
         "food_name": normalize_food_name(food["food_name"]),
-        "quantity": f"{qty} {food['quantity_unit']}",
-        "standard_unit": food.get("nutrition_unit"),
+        "quantity": f"{qty} {food.get('quantity_unit', '')}".strip(),
+        "standard_unit": unit_label,
         "carbohydrates_g": round(base["carbohydrates_g"] * factor, 2),
         "protein_g": round(base["protein_g"] * factor, 2),
         "fat_g": round(base["fat_g"] * factor, 2),
