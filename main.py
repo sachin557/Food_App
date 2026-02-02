@@ -99,39 +99,36 @@ async def image_search(file: UploadFile = File(...)):
             tmp.write(await file.read())
             tmp_path = tmp.name
 
-        # 🔍 Detect foods WITH quantity
-        food_with_qty = await run_in_threadpool(
+        detected = await run_in_threadpool(
             detect_foods_from_image,
             tmp_path
         )
 
-        if not food_with_qty:
+        foods = detected.get("foods", [])
+        if not foods:
             raise HTTPException(
                 status_code=400,
                 detail="No food detected in image"
             )
 
-        # 🧮 Nutrition calculation
+        # Convert structured data → text expected by nutrition LLM
+        food_input = ", ".join(
+            f'{f["quantity_number"]} {f["quantity_unit"]} {f["food_name"]}'
+            for f in foods
+        )
+
         nutrition = await run_in_threadpool(
             get_nutrition,
-            food_with_qty
+            food_input
         )
 
         return {
             "input_type": "image",
-            "detected_foods": food_with_qty,
-            "note": "Quantities estimated visually using standard servings",
+            "detected_foods": foods,
+            "note": "Quantities estimated visually",
             **nutrition
         }
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        print("❌ IMAGE ERROR:", e)
-        raise HTTPException(
-            status_code=503,
-            detail="Image nutrition service unavailable"
-        )
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)

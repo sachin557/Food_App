@@ -15,29 +15,31 @@ You are a food recognition system.
 
 Rules:
 - Identify ONLY real foods visible in the image
-- Estimate quantity ONLY using common visual portions
-- Use STANDARD UNITS ONLY
-- If unsure, choose the nearest standard serving
+- Estimate quantity using common visual portions
+- Use ONLY these units: piece, gram, ml, cup
+- If unsure, choose the closest standard portion
+- DO NOT guess nutrition values
 - DO NOT hallucinate foods
 
-Allowed units:
-- grams (g)
-- milliliters (ml)
-- cups
-- pieces
+Return STRICT JSON ONLY in this format:
 
-Return ONLY comma-separated values in this format:
-food_name (quantity unit)
+{
+  "foods": [
+    {
+      "food_name": "string",
+      "quantity_number": number,
+      "quantity_unit": "piece | gram | ml | cup"
+    }
+  ]
+}
 
-Examples:
-rice (1 cup), grilled chicken (150 g), boiled egg (1 piece)
-milk (200 ml)
-
-If no food detected, return empty string.
+If no food detected, return:
+{ "foods": [] }
 """
 
 
-def detect_foods_from_image(image_path: str) -> str:
+
+def detect_foods_from_image(image_path: str) -> dict:
     image = Image.open(image_path)
 
     response = llm.models.generate_content(
@@ -47,7 +49,10 @@ def detect_foods_from_image(image_path: str) -> str:
 
     text = response.text.strip()
 
-    # sanitize output
-    text = text.replace("\n", " ").replace(".", "").strip()
-
-    return text
+    try:
+        return json.loads(text)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Image model returned invalid JSON"
+        )

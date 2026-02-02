@@ -12,11 +12,8 @@ from langchain_core.output_parsers import StrOutputParser
 # ===================== ENV =====================
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("Groq_api")
-if not GROQ_API_KEY:
+if not os.getenv("GROQ_API_KEY"):
     raise RuntimeError("GROQ_API_KEY is not set")
-
-os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
 # ===================== CONSTANTS =====================
 MAX_FOODS = 10
@@ -35,10 +32,10 @@ def calculate_total_nutrition(foods: list) -> dict:
     }
 
     for food in foods:
-        total["carbohydrates_g"] += float(food.get("carbohydrates_g", 0))
-        total["protein_g"] += float(food.get("protein_g", 0))
-        total["fat_g"] += float(food.get("fat_g", 0))
-        total["calories_kcal"] += float(food.get("calories_kcal", 0))
+        total["carbohydrates_g"] += food["carbohydrates_g"]
+        total["protein_g"] += food["protein_g"]
+        total["fat_g"] += food["fat_g"]
+        total["calories_kcal"] += food["calories_kcal"]
 
     return {k: round(v, 2) for k, v in total.items()}
 
@@ -68,7 +65,7 @@ llm = ChatGroq(
 
 parser = StrOutputParser()
 
-# ===================== PROMPT (CRITICAL FIX) =====================
+# ===================== PROMPT =====================
 prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -76,28 +73,39 @@ prompt = ChatPromptTemplate.from_messages(
             f"""
 You are a professional nutrition assistant.
 
-CRITICAL:
+CRITICAL RULES:
 - Fix spelling mistakes
 - Use ONLY real foods
 - DO NOT hallucinate foods
+- DO NOT calculate totals
+- DO NOT multiply values
 
-Rules:
-1. User may give multiple foods (MAX {MAX_FOODS})
-2. Use quantity if present, otherwise standard serving
-3. Return nutrition per food
-4. Return ONLY valid JSON
+Your job:
+1. Extract food name
+2. Extract quantity EXACTLY as user typed
+3. Provide nutrition for ONE STANDARD UNIT ONLY
 
-The response MUST be a JSON object with this EXACT structure:
+STANDARD UNIT EXAMPLES:
+- Egg → 1 large egg
+- Rice → 100 grams cooked
+- Milk → 100 ml
+- Chicken → 100 grams cooked
 
-{{{{ 
+Return ONLY valid JSON in this EXACT format:
+
+{{{{  
   "foods": [
     {{{{
       "food_name": "string",
-      "quantity": "string",
-      "carbohydrates_g": number,
-      "protein_g": number,
-      "fat_g": number,
-      "calories_kcal": number
+      "quantity_number": number,
+      "quantity_unit": "string",
+      "standard_unit": "string",
+      "nutrition_per_standard_unit": {{{{
+        "carbohydrates_g": number,
+        "protein_g": number,
+        "fat_g": number,
+        "calories_kcal": number
+      }}}}
     }}}}
   ]
 }}}}
@@ -110,14 +118,42 @@ DO NOT include any text outside JSON.
 )
 
 # ===================== RETRY HELPER =====================
-def invoke_with_retry(chain, payload, retries=3, delay=2):
+def invoke_with_retry(chain, payload, retries=2, delay=3):
     for attempt in range(retries):
         try:
             return chain.invoke(payload)
-        except Exception as e:
+        except Exception:
             if attempt == retries - 1:
-                raise e
+                raise
             time.sleep(delay)
+
+
+# ===================== CALCULATION =====================
+def apply_quantity_multiplier(food: dict) -> dict:
+    qty = food["quantity_number"]
+    base = food["nutrition_per_unit"]
+
+    nutrition_unit = food.get("nutrition_unit", "").lower()
+    quantity_unit = food.get("quantity_unit", "").lower()
+
+    # 🔒 UNIT NORMALIZATION (minimal fix)
+    factor = 1.0
+
+    # If nutrition is per 100g or 100ml, normalize to per 1 unit
+    if "100" in nutrition_unit:
+        factor = qty / 100
+    else:
+        factor = qty
+
+    return {
+        "food_name": normalize_food_name(food["food_name"]),
+        "quantity": f"{qty} {food['quantity_unit']}",
+        "standard_unit": food.get("nutrition_unit"),
+        "carbohydrates_g": round(base["carbohydrates_g"] * factor, 2),
+        "protein_g": round(base["protein_g"] * factor, 2),
+        "fat_g": round(base["fat_g"] * factor, 2),
+        "calories_kcal": round(base["calories_kcal"] * factor, 2),
+    }
 
 
 # ===================== CORE FUNCTION =====================
@@ -153,13 +189,11 @@ def get_nutrition(food_input: str) -> dict:
     if not foods:
         raise HTTPException(status_code=500, detail="No food detected")
 
-    # Normalize names
-    for food in foods:
-        food["food_name"] = normalize_food_name(food.get("food_name", ""))
+    final_foods = [apply_quantity_multiplier(food) for food in foods]
 
     return {
-        "result_type": "multiple" if len(foods) > 1 else "single",
-        "serving_note": "Nutrition calculated based on provided quantity or standard serving",
-        "foods": foods,
-        "total_nutrition": calculate_total_nutrition(foods),
+        "result_type": "multiple" if len(final_foods) > 1 else "single",
+        "serving_note": "Nutrition calculated using standard serving multiplied by user quantity",
+        "foods": final_foods,
+        "total_nutrition": calculate_total_nutrition(final_foods),
     }
