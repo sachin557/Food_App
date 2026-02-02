@@ -99,23 +99,28 @@ async def image_search(file: UploadFile = File(...)):
             tmp.write(await file.read())
             tmp_path = tmp.name
 
-        food_names = await run_in_threadpool(
+        # 🔍 Detect foods WITH quantity
+        food_with_qty = await run_in_threadpool(
             detect_foods_from_image,
             tmp_path
         )
 
-        if not food_names:
-            raise HTTPException(status_code=400, detail="No food detected in image")
+        if not food_with_qty:
+            raise HTTPException(
+                status_code=400,
+                detail="No food detected in image"
+            )
 
+        # 🧮 Nutrition calculation
         nutrition = await run_in_threadpool(
             get_nutrition,
-            food_names
+            food_with_qty
         )
 
         return {
             "input_type": "image",
-            "detected_foods": food_names,
-            "note": "Standard serving sizes used (image input has no quantity)",
+            "detected_foods": food_with_qty,
+            "note": "Quantities estimated visually using standard servings",
             **nutrition
         }
 
