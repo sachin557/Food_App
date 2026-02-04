@@ -7,11 +7,17 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 
+from langchain_core.messages import HumanMessage
+
+# -------- EXISTING IMPORTS --------
 from Image_search import detect_foods_from_image
 from speech_text import transcribe_audio
 from voice_search import get_voice_nutrition
 from Type_Search import get_nutrition
 from Ai_coach_chat import ai_fitness_chat
+
+# -------- NEW HEIGHT → WEIGHT GRAPH --------
+from height_weight_graph import height_weight_app
 
 # ------------------ APP INIT ------------------
 app = FastAPI(title="Nutrition & AI Fitness API")
@@ -33,6 +39,10 @@ class ChatRequest(BaseModel):
     message: str
     food_context: Optional[Dict] = None
     chat_history: Optional[List[Dict[str, str]]] = None
+
+class HeightWeightRequest(BaseModel):
+    height: float
+    unit: str  # "cm" or "feet"
 
 # ------------------ TEXT FOOD SEARCH ------------------
 @app.post("/search-food")
@@ -111,7 +121,6 @@ async def image_search(file: UploadFile = File(...)):
                 detail="No food detected in image"
             )
 
-        # Convert structured data → text expected by nutrition LLM
         food_input = ", ".join(
             f'{f["quantity_number"]} {f["quantity_unit"]} {f["food_name"]}'
             for f in foods
@@ -132,6 +141,32 @@ async def image_search(file: UploadFile = File(...)):
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+# ------------------ HEIGHT → WEIGHT (NEW) ------------------
+@app.post("/height-to-weight")
+async def height_to_weight(data: HeightWeightRequest):
+    height = data.height
+    unit = data.unit.lower()
+
+    if height <= 0:
+        raise HTTPException(status_code=400, detail="Invalid height")
+
+    # Convert feet → cm
+    if unit == "feet":
+        height = height * 30.48
+    elif unit != "cm":
+        raise HTTPException(status_code=400, detail="Invalid unit")
+
+    result = height_weight_app.invoke({
+        "messages": [HumanMessage(content=str(height))]
+    })
+
+    answer = result["messages"][-1].content
+
+    return {
+        "height_cm": round(height, 2),
+        "result": answer
+    }
 
 # ------------------ HEALTH ------------------
 @app.api_route("/health", methods=["GET", "HEAD"])
