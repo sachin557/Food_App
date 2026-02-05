@@ -44,8 +44,8 @@ prompt = ChatPromptTemplate.from_messages([
 @tool
 def weight_predict(height: float) -> float:
     """Predicts weight from height using ML model"""
-    return float(predict(height))
-
+    value= float(predict(height))
+    return round(value,2)
 # ---------------- LLM ----------------
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
