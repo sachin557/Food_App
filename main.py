@@ -16,8 +16,8 @@ from voice_search import get_voice_nutrition
 from Type_Search import get_nutrition
 from Ai_coach_chat import ai_fitness_chat
 
-# -------- NEW HEIGHT → WEIGHT GRAPH --------
-from height_weight_graph import height_weight_app
+# ✅ FIXED IMPORT (MATCH FILE NAME)
+from height_langgraph import height_weight_app
 
 # ------------------ APP INIT ------------------
 app = FastAPI(title="Nutrition & AI Fitness API")
@@ -48,17 +48,14 @@ class HeightWeightRequest(BaseModel):
 @app.post("/search-food")
 async def search_food(data: FoodRequest):
     food_input = data.food_name.strip()
-
     if not food_input:
         raise HTTPException(status_code=400, detail="Food input cannot be empty")
-
     return await run_in_threadpool(get_nutrition, food_input)
 
 # ------------------ VOICE → FOOD SEARCH ------------------
 @app.post("/voice-food")
 async def voice_food(file: UploadFile = File(...)):
     tmp_path = None
-
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(await file.read())
@@ -76,10 +73,6 @@ async def voice_food(file: UploadFile = File(...)):
             "foods": nutrition["foods"],
             "total_nutrition": nutrition["total_nutrition"],
         }
-
-    except Exception as e:
-        print("❌ VOICE ERROR:", e)
-        raise HTTPException(status_code=503, detail="Voice service unavailable")
 
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -102,7 +95,6 @@ async def ai_chat(data: ChatRequest):
 @app.post("/image-search")
 async def image_search(file: UploadFile = File(...)):
     tmp_path = None
-
     try:
         suffix = os.path.splitext(file.filename)[1]
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -116,25 +108,18 @@ async def image_search(file: UploadFile = File(...)):
 
         foods = detected.get("foods", [])
         if not foods:
-            raise HTTPException(
-                status_code=400,
-                detail="No food detected in image"
-            )
+            raise HTTPException(status_code=400, detail="No food detected")
 
         food_input = ", ".join(
             f'{f["quantity_number"]} {f["quantity_unit"]} {f["food_name"]}'
             for f in foods
         )
 
-        nutrition = await run_in_threadpool(
-            get_nutrition,
-            food_input
-        )
+        nutrition = await run_in_threadpool(get_nutrition, food_input)
 
         return {
             "input_type": "image",
             "detected_foods": foods,
-            "note": "Quantities estimated visually",
             **nutrition
         }
 
@@ -142,7 +127,7 @@ async def image_search(file: UploadFile = File(...)):
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-# ------------------ HEIGHT → WEIGHT (NEW) ------------------
+# ------------------ HEIGHT → WEIGHT ------------------
 @app.post("/height-to-weight")
 async def height_to_weight(data: HeightWeightRequest):
     height = data.height
@@ -157,18 +142,19 @@ async def height_to_weight(data: HeightWeightRequest):
     elif unit != "cm":
         raise HTTPException(status_code=400, detail="Invalid unit")
 
-    result = height_weight_app.invoke({
-        "messages": [HumanMessage(content=str(height))]
-    })
-
-    answer = result["messages"][-1].content
+    try:
+        result = height_weight_app.invoke({
+            "messages": [HumanMessage(content=str(height))]
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     return {
         "height_cm": round(height, 2),
-        "result": answer
+        "result": result["messages"][-1].content
     }
 
 # ------------------ HEALTH ------------------
-@app.api_route("/health", methods=["GET", "HEAD"])
+@app.get("/health")
 def health():
     return {"status": "ok"}
