@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DG_API_KEY = os.getenv("DG_API_KEY")
+DG_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
 client = DeepgramClient(api_key=DG_API_KEY)
 
