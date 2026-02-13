@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 
 from langchain_core.messages import HumanMessage
-from offline_data import offline_food_search
+#from offline_data import offline_food_search
 # -------- EXISTING IMPORTS --------
 from Image_search import detect_foods_from_image
 from speech_text import transcribe_audio
@@ -156,24 +156,24 @@ async def height_to_weight(data: HeightWeightRequest):
         "result": result["messages"][-1].content
     }
 
-@app.post("/offline-food-search")
-async def offline_food(data: OfflineFoodRequest):
-    food = data.food_name.strip()
+#@app.post("/offline-food-search")
+#async def offline_food(data: OfflineFoodRequest):
+ #   food = data.food_name.strip()
 
-    if not food:
-        raise HTTPException(status_code=400, detail="Food name required")
+  #  if not food:
+   #     raise HTTPException(status_code=400, detail="Food name required")
 
-    try:
-        results = await run_in_threadpool(
-            offline_food_search, food
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    #try:
+     #   results = await run_in_threadpool(
+      #      offline_food_search, food
+       # )
+    #except Exception as e:
+     #   raise HTTPException(status_code=500, detail=str(e))
 
-    if not results:
-        return {"foods": [], "message": "No similar food found"}
+    #if not results:
+     #   return {"foods": [], "message": "No similar food found"}
 
-    return {"foods": results}
+    #return {"foods": results}
 
 # ------------------ HEALTH ------------------
 @app.get("/health")
