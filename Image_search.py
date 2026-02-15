@@ -1,7 +1,9 @@
 import os
+import json  # ✅ REQUIRED
 from dotenv import load_dotenv
 from google import genai
 from PIL import Image
+from fastapi import HTTPException  # ✅ REQUIRED
 
 load_dotenv()
 
@@ -37,22 +39,27 @@ If no food detected, return:
 { "foods": [] }
 """
 
-
-
 def detect_foods_from_image(image_path: str) -> dict:
-    image = Image.open(image_path)
-
-    response = llm.models.generate_content(
-        model="models/gemini-2.5-flash",
-        contents=[FOOD_DETECTION_PROMPT, image]
-    )
-
-    text = response.text.strip()
-
     try:
+        image = Image.open(image_path)
+
+        response = llm.models.generate_content(
+            model="models/gemini-2.5-flash",
+            contents=[FOOD_DETECTION_PROMPT, image]
+        )
+
+        text = response.text.strip()
+
         return json.loads(text)
-    except Exception:
+
+    except json.JSONDecodeError:
         raise HTTPException(
             status_code=500,
             detail="Image model returned invalid JSON"
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
         )
