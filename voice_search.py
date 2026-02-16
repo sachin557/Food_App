@@ -40,37 +40,56 @@ def safe_json_parse(text: str) -> dict:
     raise HTTPException(status_code=500, detail="Invalid JSON from AI")
 
 # ================= PROMPT =================
-prompt = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        f"""
-You are a nutrition extraction engine.
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            f"""
+You are a professional nutrition assistant.
 
-STRICT RULES:
-- ALWAYS return at least ONE food if food is mentioned
-- Ignore filler words
-- Use standard serving if quantity unclear
-- NEVER return empty foods list
-- Max {MAX_FOODS} foods
-- Return STRICT JSON ONLY
+CRITICAL RULES:
+- Fix spelling mistakes
+- Use ONLY real foods
+- DO NOT hallucinate foods
+- DO NOT calculate totals
+- DO NOT multiply values
 
-FORMAT:
-{{
+Your job:
+1. Extract food name
+2. Extract quantity EXACTLY as user typed
+3. Provide nutrition for ONE STANDARD UNIT ONLY
+
+STANDARD UNIT EXAMPLES:
+- Egg → 1 large egg
+- Rice → 100 grams cooked
+- Milk → 100 ml
+- Chicken → 100 grams cooked
+
+Return ONLY valid JSON in this EXACT format:
+
+{{{{  
   "foods": [
-    {{
-      "food_name": "Egg",
-      "quantity": "2 piece",
-      "carbohydrates_g": number,
-      "protein_g": number,
-      "fat_g": number,
-      "calories_kcal": number
-    }}
+    {{{{
+      "food_name": "string",
+      "quantity_number": number,
+      "quantity_unit": "string",
+      "standard_unit": "string",
+      "nutrition_per_standard_unit": {{{{
+        "carbohydrates_g": number,
+        "protein_g": number,
+        "fat_g": number,
+        "calories_kcal": number
+      }}}}
+    }}}}
   ]
-}}
+}}}}
+
+DO NOT include any text outside JSON.
 """
-    ),
-    ("human", "Transcript: {food_input}")
-])
+        ),
+        ("human", "Food input: {food_input}")
+    ]
+)
 
 parser = StrOutputParser()
 
