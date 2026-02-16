@@ -1,9 +1,10 @@
 import os
-import json  # ✅ REQUIRED
+import json
+import re
 from dotenv import load_dotenv
 from google import genai
 from PIL import Image
-from fastapi import HTTPException  # ✅ REQUIRED
+from fastapi import HTTPException
 
 load_dotenv()
 
@@ -39,24 +40,39 @@ If no food detected, return:
 { "foods": [] }
 """
 
+def _extract_json(text: str) -> dict:
+    """
+    Safely extract JSON from Gemini output
+    """
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        raise HTTPException(
+            status_code=500,
+            detail="No JSON found in image model response"
+        )
+
+    try:
+        return json.loads(match.group())
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid JSON returned by image model"
+        )
+
 def detect_foods_from_image(image_path: str) -> dict:
     try:
-        image = Image.open(image_path)
+        image = Image.open(image_path).convert("RGB")
 
         response = llm.models.generate_content(
             model="models/gemini-2.5-flash",
             contents=[FOOD_DETECTION_PROMPT, image]
         )
 
-        text = response.text.strip()
+        raw_text = response.text.strip()
+        return _extract_json(raw_text)
 
-        return json.loads(text)
-
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=500,
-            detail="Image model returned invalid JSON"
-        )
+    except HTTPException:
+        raise
 
     except Exception as e:
         raise HTTPException(
