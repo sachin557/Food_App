@@ -7,26 +7,24 @@ load_dotenv()
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 if not DEEPGRAM_API_KEY:
-    raise RuntimeError("❌ DEEPGRAM_API_KEY not set")
+    raise RuntimeError("DEEPGRAM_API_KEY not set")
 
-# ✅ FIX: keyword argument (v3 requirement)
+# ✅ Correct initialization
 dg_client = DeepgramClient(api_key=DEEPGRAM_API_KEY)
 
 def transcribe_audio(audio_path: str) -> str:
     try:
         with open(audio_path, "rb") as audio:
-            buffer_data = audio.read()
+            audio_bytes = audio.read()
 
-        # ✅ OPTIONS AS DICT (v3)
-        options = {
-            "model": "nova-2",
-            "language": "en",
-            "smart_format": True,
-        }
-
-        response = dg_client.listen.prerecorded.transcribe_file(
-            {"buffer": buffer_data},
-            options,
+        # ✅ THIS WORKS WITH YOUR INSTALLED SDK
+        response = dg_client.listen.transcribe_file(
+            {"buffer": audio_bytes},
+            {
+                "model": "nova-2",
+                "language": "en",
+                "smart_format": True,
+            },
         )
 
         transcript = (
