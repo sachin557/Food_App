@@ -14,7 +14,10 @@ dg = Deepgram(DEEPGRAM_API_KEY)
 def transcribe_audio(audio_path: str) -> str:
     try:
         with open(audio_path, "rb") as audio:
-            source = {"buffer": audio, "mimetype": "audio/wav"}
+            source = {
+                "buffer": audio,
+                "mimetype": "audio/wav"
+            }
 
             response = dg.transcription.prerecorded(
                 source,
@@ -22,14 +25,10 @@ def transcribe_audio(audio_path: str) -> str:
                     "model": "nova-2",
                     "language": "en",
                     "smart_format": True,
-                },
+                }
             )
 
-        transcript = (
-            response["results"]["channels"][0]
-            ["alternatives"][0]["transcript"]
-        )
-
+        transcript = response["results"]["channels"][0]["alternatives"][0]["transcript"]
         return transcript.strip()
 
     except Exception as e:
