@@ -73,22 +73,22 @@ IMPORTANT:
 
 Return ONLY valid JSON in this EXACT format:
 
-{
+{{
   "foods": [
-    {
+    {{
       "food_name": "string",
       "quantity_number": number,
       "quantity_unit": "string",
       "standard_unit": "string",
-      "nutrition_per_standard_unit": {
+      "nutrition_per_standard_unit": {{
         "carbohydrates_g": number,
         "protein_g": number,
         "fat_g": number,
         "calories_kcal": number
-      }
-    }
+      }}
+    }}
   ]
-}
+}}
 
 DO NOT include any text outside JSON.
 """
@@ -96,6 +96,7 @@ DO NOT include any text outside JSON.
         ("human", "Food input: {food_input}")
     ]
 )
+
 
 parser = StrOutputParser()
 
