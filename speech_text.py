@@ -9,15 +9,15 @@ DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 if not DEEPGRAM_API_KEY:
     raise RuntimeError("❌ DEEPGRAM_API_KEY not set")
 
-# ✅ NEW CLIENT (v3)
-dg_client = DeepgramClient(DEEPGRAM_API_KEY)
+# ✅ FIX: keyword argument (v3 requirement)
+dg_client = DeepgramClient(api_key=DEEPGRAM_API_KEY)
 
 def transcribe_audio(audio_path: str) -> str:
     try:
         with open(audio_path, "rb") as audio:
             buffer_data = audio.read()
 
-        # ✅ OPTIONS AS DICT (v3 FIX)
+        # ✅ OPTIONS AS DICT (v3)
         options = {
             "model": "nova-2",
             "language": "en",
@@ -37,7 +37,7 @@ def transcribe_audio(audio_path: str) -> str:
         return transcript.strip()
 
     except Exception as e:
-        print("❌ SPEECH TRANSCRIPTION ERROR:", repr(e))
+        print("❌ DEEPGRAM ERROR:", repr(e))
         raise HTTPException(
             status_code=500,
             detail="Speech transcription failed"
