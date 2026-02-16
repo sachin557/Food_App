@@ -66,7 +66,7 @@ async def voice_food(file: UploadFile = File(...)):
         text = await run_in_threadpool(transcribe_audio, tmp_path)
 
         if not text.strip():
-            return {"transcript": "", "foods": [], "total_nutrition": {}}
+            raise HTTPException(status_code=400, detail="No speech detected")
 
         nutrition = await run_in_threadpool(get_voice_nutrition, text)
 
@@ -79,6 +79,7 @@ async def voice_food(file: UploadFile = File(...)):
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+)
 
 # ------------------ AI FITNESS CHAT ------------------
 @app.post("/ai-chat")
