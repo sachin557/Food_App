@@ -36,7 +36,10 @@ def safe_json_parse(text: str) -> dict:
         start = text.find("{")
         end = text.rfind("}") + 1
         if start != -1 and end != -1:
-            return json.loads(text[start:end])
+            try:
+                return json.loads(text[start:end])
+            except Exception:
+                pass
     raise HTTPException(status_code=500, detail="Invalid JSON from AI")
 
 # ================= PROMPT =================
@@ -44,7 +47,7 @@ prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            f"""
+            """
 You are a professional nutrition assistant.
 
 CRITICAL RULES:
@@ -65,24 +68,27 @@ STANDARD UNIT EXAMPLES:
 - Milk → 100 ml
 - Chicken → 100 grams cooked
 
+IMPORTANT:
+- If a nutrient is negligible, return 0 (do NOT omit it)
+
 Return ONLY valid JSON in this EXACT format:
 
-{{{{  
+{
   "foods": [
-    {{{{
+    {
       "food_name": "string",
       "quantity_number": number,
       "quantity_unit": "string",
       "standard_unit": "string",
-      "nutrition_per_standard_unit": {{{{
+      "nutrition_per_standard_unit": {
         "carbohydrates_g": number,
         "protein_g": number,
         "fat_g": number,
         "calories_kcal": number
-      }}}}
-    }}}}
+      }
+    }
   ]
-}}}}
+}
 
 DO NOT include any text outside JSON.
 """
@@ -93,7 +99,27 @@ DO NOT include any text outside JSON.
 
 parser = StrOutputParser()
 
-# ================= CORE =================
+# ================= APPLY MULTIPLIER =================
+def apply_quantity(food: dict) -> dict:
+    qty = food.get("quantity_number", 1)
+
+    base = food.get("nutrition_per_standard_unit", {})
+
+    carbs = base.get("carbohydrates_g", 0)
+    protein = base.get("protein_g", 0)
+    fat = base.get("fat_g", 0)
+    calories = base.get("calories_kcal", 0)
+
+    return {
+        "food_name": food.get("food_name", "").title(),
+        "quantity": f'{qty} {food.get("quantity_unit", "")}'.strip(),
+        "carbohydrates_g": round(carbs * qty, 2),
+        "protein_g": round(protein * qty, 2),
+        "fat_g": round(fat * qty, 2),
+        "calories_kcal": round(calories * qty, 2),
+    }
+
+# ================= CORE FUNCTION =================
 def get_voice_nutrition(food_input: str) -> dict:
     food_input = clean_transcript(food_input)
 
@@ -112,13 +138,22 @@ def get_voice_nutrition(food_input: str) -> dict:
     response = chain.invoke({"food_input": food_input})
 
     data = safe_json_parse(response)
-    foods = data.get("foods", [])
+    foods_raw = data.get("foods", [])
 
-    if not foods:
+    if not foods_raw:
         raise HTTPException(
             status_code=400,
             detail="No food detected from voice input"
         )
+
+    if len(foods_raw) > MAX_FOODS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {MAX_FOODS} foods allowed"
+        )
+
+    # ✅ Apply quantity safely
+    foods = [apply_quantity(f) for f in foods_raw]
 
     total = {
         "carbohydrates_g": round(sum(f["carbohydrates_g"] for f in foods), 2),
