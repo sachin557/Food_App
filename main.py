@@ -79,7 +79,6 @@ async def voice_food(file: UploadFile = File(...)):
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
-)
 
 # ------------------ AI FITNESS CHAT ------------------
 @app.post("/ai-chat")
