@@ -1,7 +1,8 @@
 import os
 import json
-from fastapi import HTTPException
+import re
 from dotenv import load_dotenv
+from fastapi import HTTPException
 
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
@@ -16,6 +17,17 @@ if not GROQ_API_KEY:
 
 MAX_FOODS = 10
 
+# ================= CLEAN TRANSCRIPT =================
+def clean_transcript(text: str) -> str:
+    junk = [
+        "uh", "umm", "please", "can you",
+        "i ate", "i had", "today", "yesterday"
+    ]
+    text = text.lower()
+    for j in junk:
+        text = text.replace(j, "")
+    return text.strip()
+
 # ================= JSON SAFETY =================
 def safe_json_parse(text: str) -> dict:
     try:
@@ -24,10 +36,7 @@ def safe_json_parse(text: str) -> dict:
         start = text.find("{")
         end = text.rfind("}") + 1
         if start != -1 and end != -1:
-            try:
-                return json.loads(text[start:end])
-            except Exception:
-                pass
+            return json.loads(text[start:end])
     raise HTTPException(status_code=500, detail="Invalid JSON from AI")
 
 # ================= PROMPT =================
@@ -35,73 +44,71 @@ prompt = ChatPromptTemplate.from_messages([
     (
         "system",
         f"""
-You are a professional nutrition assistant.
+You are a nutrition extraction engine.
 
-Rules:
-1. Max {MAX_FOODS} foods
-2. Fix spelling mistakes
-3. Use real foods only
-4. Use quantity if present else standard serving
-5. Return ONLY JSON
+STRICT RULES:
+- ALWAYS return at least ONE food if food is mentioned
+- Ignore filler words
+- Use standard serving if quantity unclear
+- NEVER return empty foods list
+- Max {MAX_FOODS} foods
+- Return STRICT JSON ONLY
 
-Format:
+FORMAT:
 {{
   "foods": [
     {{
-      "food_name": "",
-      "quantity": "",
-      "carbohydrates_g": 0,
-      "protein_g": 0,
-      "fat_g": 0,
-      "calories_kcal": 0
+      "food_name": "Egg",
+      "quantity": "2 piece",
+      "carbohydrates_g": number,
+      "protein_g": number,
+      "fat_g": number,
+      "calories_kcal": number
     }}
   ]
 }}
 """
     ),
-    ("human", "Food input: {food_input}")
+    ("human", "Transcript: {food_input}")
 ])
 
 parser = StrOutputParser()
 
-# ================= CORE FUNCTION =================
+# ================= CORE =================
 def get_voice_nutrition(food_input: str) -> dict:
-    try:
-        llm = ChatGroq(
-            model="llama-3.1-8b-instant",
-            groq_api_key=GROQ_API_KEY,
-            temperature=0,
-            max_tokens=700,
-            timeout=40,
-        )
+    food_input = clean_transcript(food_input)
 
-        chain = prompt | llm | parser
-        response = chain.invoke({"food_input": food_input})
+    if not food_input:
+        raise HTTPException(status_code=400, detail="Empty voice input")
 
-        data = safe_json_parse(response)
-        foods = data.get("foods", [])
+    llm = ChatGroq(
+        model="llama-3.1-8b-instant",
+        groq_api_key=GROQ_API_KEY,
+        temperature=0,
+        max_tokens=700,
+        timeout=40,
+    )
 
-        if not foods:
-            return {
-                "foods": [],
-                "total_nutrition": {}
-            }
+    chain = prompt | llm | parser
+    response = chain.invoke({"food_input": food_input})
 
-        total = {
-            "carbohydrates_g": round(sum(f.get("carbohydrates_g", 0) for f in foods), 2),
-            "protein_g": round(sum(f.get("protein_g", 0) for f in foods), 2),
-            "fat_g": round(sum(f.get("fat_g", 0) for f in foods), 2),
-            "calories_kcal": round(sum(f.get("calories_kcal", 0) for f in foods), 2),
-        }
+    data = safe_json_parse(response)
+    foods = data.get("foods", [])
 
-        return {
-            "foods": foods,
-            "total_nutrition": total
-        }
-
-    except Exception as e:
-        print("❌ GROQ ERROR:", repr(e))
+    if not foods:
         raise HTTPException(
-            status_code=503,
-            detail="Nutrition service temporarily unavailable"
+            status_code=400,
+            detail="No food detected from voice input"
         )
+
+    total = {
+        "carbohydrates_g": round(sum(f["carbohydrates_g"] for f in foods), 2),
+        "protein_g": round(sum(f["protein_g"] for f in foods), 2),
+        "fat_g": round(sum(f["fat_g"] for f in foods), 2),
+        "calories_kcal": round(sum(f["calories_kcal"] for f in foods), 2),
+    }
+
+    return {
+        "foods": foods,
+        "total_nutrition": total
+    }
