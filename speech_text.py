@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from deepgram import Deepgram
@@ -13,23 +14,30 @@ dg = Deepgram(DEEPGRAM_API_KEY)
 
 def transcribe_audio(audio_path: str) -> str:
     try:
-        with open(audio_path, "rb") as audio:
-            source = {
-                "buffer": audio,
-                "mimetype": "audio/wav"
-            }
-
-            response = dg.transcription.prerecorded(
-                source,
-                {
-                    "model": "nova-2",
-                    "language": "en",
-                    "smart_format": True,
+        async def _transcribe():
+            with open(audio_path, "rb") as audio:
+                source = {
+                    "buffer": audio,
+                    "mimetype": "audio/wav",
                 }
-            )
 
-        transcript = response["results"]["channels"][0]["alternatives"][0]["transcript"]
-        return transcript.strip()
+                response = await dg.transcription.prerecorded(
+                    source,
+                    {
+                        "model": "nova-2",
+                        "language": "en",
+                        "smart_format": True,
+                    },
+                )
+
+                return (
+                    response["results"]["channels"][0]
+                    ["alternatives"][0]
+                    .get("transcript", "")
+                    .strip()
+                )
+
+        return asyncio.run(_transcribe())
 
     except Exception as e:
         print("❌ DEEPGRAM ERROR:", repr(e))
